@@ -92,7 +92,7 @@ if [[ ! -x "$QT_ROOT/bin/qmake" ]]; then
     mkdir -p "$WORKSPACE/Qt"
     "$VENV/bin/python" -m aqt install-qt mac desktop "${QT_VERSION}" clang_64 \
         --outputdir "$WORKSPACE/Qt" \
-        -m qt5compat qtimageformats qtserialport qtsvg
+        -m qt5compat qtimageformats qtserialport
 else
     log "Qt ${QT_VERSION} already present"
 fi
