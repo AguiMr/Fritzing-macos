@@ -156,7 +156,7 @@ step "svgpp ${SVGPP_VERSION} (headers only)"
 
 SVGPP_DIR="$WORKSPACE/svgpp-${SVGPP_VERSION}"
 if [[ ! -d "$SVGPP_DIR/include" ]]; then
-    git clone --depth 1 --branch "v${SVGPP_VERSION}" \
+    git -c advice.detachedHead=false clone --depth 1 --branch "v${SVGPP_VERSION}" \
         https://github.com/svgpp/svgpp.git "$SVGPP_DIR"
     log "svgpp cloned"
 else
@@ -164,26 +164,38 @@ else
 fi
 
 # ── 8. Clipper1 6.4.2 ────────────────────────────────────────────────────────
-# Clipper1 is header+source only (no CMake in v6); fritzing-app compiles
-# the two .cpp files directly.  We just need them at the expected path.
+# Clipper1 (polyclipping v6) is header+source only; fritzing-app compiles the
+# two .cpp files directly.  The SourceForge zip URL is unreliable, so we use
+# the SourceForge git mirror and checkout the release tag.
 step "Clipper1 ${CLIPPER1_VERSION}"
 
 CLIPPER1_DIR="$WORKSPACE/Clipper1/${CLIPPER1_VERSION}"
+CLIPPER1_GIT="$WORKSPACE/polyclipping-git"
+
 if [[ ! -f "$CLIPPER1_DIR/cpp/clipper.hpp" ]]; then
     mkdir -p "$WORKSPACE/Clipper1"
-    CLIPPER1_ZIP="/tmp/clipper_${CLIPPER1_VERSION}.zip"
-    fetch \
-        "https://sourceforge.net/projects/polyclipping/files/Clipper6/${CLIPPER1_VERSION}/clipper_${CLIPPER1_VERSION}.zip/download" \
-        "$CLIPPER1_ZIP"
-    TMP_CLIP="/tmp/clipper_extract_$$"
-    mkdir -p "$TMP_CLIP"
-    unzip -q "$CLIPPER1_ZIP" -d "$TMP_CLIP"
-    # The zip extracts to its own subdirectory or flat — find cpp/clipper.hpp
-    CLIP_SRC="$(find "$TMP_CLIP" -name 'clipper.hpp' -exec dirname {} \; | head -1)"
-    [[ -n "$CLIP_SRC" ]] || die "clipper.hpp not found inside downloaded zip"
+
+    if [[ ! -d "$CLIPPER1_GIT" ]]; then
+        # Try tag-specific shallow clone first (fast); fall back to full clone
+        git -c advice.detachedHead=false clone --depth 1 \
+            --branch "Clipper_ver${CLIPPER1_VERSION}" \
+            https://git.code.sf.net/p/polyclipping/code "$CLIPPER1_GIT" 2>/dev/null \
+        || git clone \
+            https://git.code.sf.net/p/polyclipping/code "$CLIPPER1_GIT"
+    fi
+
+    # If we did a full clone, check out the release tag
+    if ! git -C "$CLIPPER1_GIT" log -1 --format="%D" | grep -q "Clipper_ver"; then
+        git -C "$CLIPPER1_GIT" checkout "Clipper_ver${CLIPPER1_VERSION}" 2>/dev/null \
+            || log "Warning: tag Clipper_ver${CLIPPER1_VERSION} not found; using HEAD"
+    fi
+
+    CLIP_HPP="$(find "$CLIPPER1_GIT" -name 'clipper.hpp' | head -1)"
+    CLIP_CPP="$(find "$CLIPPER1_GIT" -name 'clipper.cpp' | head -1)"
+    [[ -n "$CLIP_HPP" && -n "$CLIP_CPP" ]] \
+        || die "clipper.hpp/clipper.cpp not found in cloned repo"
     mkdir -p "$CLIPPER1_DIR/cpp"
-    cp "$CLIP_SRC"/clipper.{hpp,cpp} "$CLIPPER1_DIR/cpp/"
-    rm -rf "$TMP_CLIP" "$CLIPPER1_ZIP"
+    cp "$CLIP_HPP" "$CLIP_CPP" "$CLIPPER1_DIR/cpp/"
     log "Clipper1 sources at $CLIPPER1_DIR"
 else
     log "Clipper1 already present"
