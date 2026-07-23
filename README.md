@@ -1,8 +1,34 @@
-# Fritzing macOS Build Guide
+# Fritzing on macOS
 
-This repository contains a script to automate building [Fritzing](https://fritzing.org) from source on macOS.
+The fastest, safest way to run [Fritzing](https://fritzing.org) on macOS is to
+install the **official prebuilt app** — not to build from source. Building is
+only worth it if you intend to modify Fritzing itself.
 
-## Quick Start
+## Recommended: install the prebuilt app
+
+**Option A — Homebrew (recommended).** The cask downloads the official release
+and verifies its SHA-256 checksum, so nothing unverified is installed:
+
+```bash
+brew install --cask fritzing
+```
+
+Launch it from Applications or with `open -a Fritzing`.
+
+**Option B — Official site.** Download the `.dmg` directly from the first-party
+source, [fritzing.org/download](https://fritzing.org/download) (pay-what-you-want),
+then drag Fritzing into Applications.
+
+Both are Apple-notarized and run on Intel and Apple Silicon.
+
+---
+
+## Advanced: building from source
+
+> ⚠️ **Only if you want to modify Fritzing.** The build pulls a specific pinned
+> set of dependencies, one of which (Clipper1 6.4.2) is only distributed via
+> SourceForge and may be unreachable on some networks. Prefer the prebuilt app
+> above unless you have a reason to compile.
 
 ```bash
 git clone https://github.com/AguiMr/Fritzing-macos.git
