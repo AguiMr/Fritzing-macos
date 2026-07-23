@@ -19,6 +19,9 @@ triggers the CLT install and asks you to re-run if they're missing). Runs on
 Intel and Apple Silicon. Build takes ~20–40 min the first time; re-running
 skips anything already built.
 
+Tested on macOS 26 (Tahoe), Xcode 26, Apple Silicon (arm64). Should also work
+on Intel and on macOS 13+/Xcode 15+, but that combination hasn't been verified.
+
 When it finishes:
 
 ```bash
