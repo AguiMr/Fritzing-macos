@@ -148,7 +148,11 @@ if [[ ! -f "$CLIPPER1_DIR/lib/libpolyclipping.dylib" && ! -f "$CLIPPER1_DIR/lib/
     [[ -f "$VENDORED_CLIPPER/clipper.cpp" ]] || die "vendored Clipper source missing at $VENDORED_CLIPPER"
     BUILD="$WORKSPACE/.clipper-build"
     rm -rf "$BUILD"; mkdir -p "$BUILD"
+    # Clipper 6.4.2's CMakeLists declares cmake_minimum_required 2.6, which
+    # CMake >= 4 rejects. Allow the old policy without modifying the vendored
+    # upstream file (keeps its recorded SHA-256 intact).
     cmake -S "$VENDORED_CLIPPER" -B "$BUILD" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$CLIPPER1_DIR"
     cmake --build "$BUILD" --parallel "$JOBS"
     cmake --install "$BUILD"
