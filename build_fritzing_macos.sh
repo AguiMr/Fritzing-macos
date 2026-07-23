@@ -170,9 +170,11 @@ if [[ ! -f "$NGSPICE_DIR/lib/libngspice.dylib" ]]; then
         --branch "ngspice-${NGSPICE_VERSION}" https://github.com/imr/ngspice.git "$NGSPICE_SRC"
     ( cd "$NGSPICE_SRC"
       [[ -x ./configure ]] || ./autogen.sh
-      mkdir -p release && cd release
+      rm -rf release && mkdir -p release && cd release   # clean reconfigure
+      # Apple clang (Xcode 16.3+) defaults to C23, where 'bool' is a keyword;
+      # ngspice 42 does `typedef int bool;`. Pin C17 so it compiles.
       ../configure --prefix="$NGSPICE_DIR" --with-ngshared \
-          --disable-debug --enable-xspice --enable-cider CFLAGS="-O2"
+          --disable-debug --enable-xspice --enable-cider CFLAGS="-O2 -std=gnu17"
       make -j"$JOBS"
       make install )
     log "ngspice installed to $NGSPICE_DIR (include + libngspice.dylib)"
