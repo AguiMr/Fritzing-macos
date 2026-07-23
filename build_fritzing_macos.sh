@@ -11,7 +11,8 @@
 #   svgpp 1.3.1 .... github.com/svgpp     (headers only)
 #   QuaZip 1.4 ..... github.com/stachenov (built)
 #   Clipper1 6.4.2 . vendored in deps/    (verified original, see PROVENANCE.md)
-#   ngspice 42 ..... github.com/imr/ngspice (official maintainers' mirror, built)
+#   ngspice ........ github.com/imr/ngspice (official mirror; builds tag 46,
+#                    installs as ngspice-42 — 42's source fails on Xcode 16.3)
 set -euo pipefail
 
 # ── Pinned versions (must match fritzing-app 1.0.7 pri/*detect.pri) ───────────
@@ -22,7 +23,12 @@ LIBGIT2_VERSION="1.7.1"
 QUAZIP_VERSION="1.4"
 SVGPP_VERSION="1.3.1"
 CLIPPER1_VERSION="6.4.2"
-NGSPICE_VERSION="42"
+NGSPICE_VERSION="42"                # dir name Fritzing 1.0.7's spicedetect expects
+NGSPICE_BUILD_TAG="ngspice-46"      # version we actually build: 42's bundled
+                                    # cppduals illegally specializes std::is_compound
+                                    # and fails on Xcode 16.3 libc++. 46 compiles
+                                    # clean (same version Homebrew ships) and its
+                                    # sharedspice API is compatible with Fritzing.
 
 JOBS=$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
@@ -166,8 +172,14 @@ step "ngspice ${NGSPICE_VERSION} (shared library)"
 NGSPICE_DIR="$WORKSPACE/ngspice-${NGSPICE_VERSION}"
 if [[ ! -f "$NGSPICE_DIR/lib/libngspice.dylib" ]]; then
     NGSPICE_SRC="$WORKSPACE/ngspice-src"
-    [[ -d "$NGSPICE_SRC" ]] || git -c advice.detachedHead=false clone --depth 1 \
-        --branch "ngspice-${NGSPICE_VERSION}" https://github.com/imr/ngspice.git "$NGSPICE_SRC"
+    # Ensure the source tree is at NGSPICE_BUILD_TAG; re-clone if it is missing
+    # or (e.g. from an earlier run) checked out at a different tag.
+    if [[ ! -d "$NGSPICE_SRC/.git" ]] || \
+       ! git -C "$NGSPICE_SRC" describe --tags --exact-match 2>/dev/null | grep -qx "$NGSPICE_BUILD_TAG"; then
+        rm -rf "$NGSPICE_SRC"
+        git -c advice.detachedHead=false clone --depth 1 \
+            --branch "$NGSPICE_BUILD_TAG" https://github.com/imr/ngspice.git "$NGSPICE_SRC"
+    fi
     # macOS system bison/flex are ancient and cannot parse ngspice's grammar;
     # Homebrew's are keg-only, so put them first on PATH for autogen and make.
     BISON_PREFIX="$(brew --prefix bison 2>/dev/null || true)"
@@ -176,13 +188,13 @@ if [[ ! -f "$NGSPICE_DIR/lib/libngspice.dylib" ]]; then
       cd "$NGSPICE_SRC"
       [[ -x ./configure ]] || ./autogen.sh
       rm -rf release && mkdir -p release && cd release   # clean reconfigure
-      # Apple clang (Xcode 16.3+) defaults to C23, where 'bool' is a keyword;
-      # ngspice 42 does `typedef int bool;`. Pin C17 so it compiles.
+      # Flags mirror Homebrew's proven ngspice build, plus --with-ngshared to
+      # produce libngspice.dylib (which Homebrew's formula omits).
       ../configure --prefix="$NGSPICE_DIR" --with-ngshared \
-          --disable-debug --enable-xspice --enable-cider CFLAGS="-O2 -std=gnu17"
+          --enable-xspice --enable-cider --disable-openmp CFLAGS="-O2"
       make -j"$JOBS"
       make install )
-    log "ngspice installed to $NGSPICE_DIR (include + libngspice.dylib)"
+    log "ngspice ${NGSPICE_BUILD_TAG} installed to $NGSPICE_DIR (include + libngspice.dylib)"
 else
     log "ngspice already built"
 fi

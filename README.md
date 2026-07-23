@@ -36,7 +36,7 @@ open "$(find .. -name Fritzing.app | head -1)"
 | svgpp (headers) | 1.3.1 | github.com/svgpp |
 | QuaZip | 1.4 | github.com/stachenov/quazip |
 | **Clipper1** | **6.4.2** | **vendored in [`deps/`](deps/polyclipping-6.4.2/)** — verified original, see [PROVENANCE.md](deps/polyclipping-6.4.2/PROVENANCE.md) |
-| ngspice | 42 | github.com/imr/ngspice (official maintainers' mirror) |
+| ngspice | 46 → installed as `ngspice-42` | github.com/imr/ngspice (official maintainers' mirror) |
 
 ### Why Clipper1 is vendored
 
@@ -72,7 +72,10 @@ what Fritzing's `pri/*detect.pri` scripts expect:
   installs 6.5.3 into the `Qt/` sibling dir and uses that one specifically.
 - **`ngspice not found`** — the build needs `ngspice-42/` present (its headers).
   Re-run so step 9 completes; simulation at runtime uses the bundled
-  `libngspice.dylib`.
+  `libngspice.dylib`. Note the directory is named `ngspice-42` (what Fritzing
+  1.0.7 hardcodes) but contains ngspice **46**: version 42's bundled `cppduals`
+  fails to compile against Xcode 16.3's libc++ (`is_compound` specialization),
+  while 46 builds cleanly and keeps a compatible shared API.
 - **Apple Silicon** — Qt is installed as `clang_64` and the app runs natively
   or via Rosetta. To force an Intel build if you hit an arch mismatch, add
   `CONFIG+=x86_64` to the `qmake` line in the script.
