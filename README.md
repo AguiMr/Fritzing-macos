@@ -11,7 +11,13 @@ chmod +x build_fritzing_macos.sh
 ./build_fritzing_macos.sh
 ```
 
-Run the script again after it finishes each step — on the first run it may ask you to install Xcode CLT and exit early.
+To also build the circuit simulator (ngspice), add the flag:
+
+```bash
+./build_fritzing_macos.sh --with-ngspice
+```
+
+Re-run after the first run if Xcode CLT prompts an install dialog — the script exits early and resumes cleanly on the next run.
 
 ---
 
@@ -21,16 +27,16 @@ Run the script again after it finishes each step — on the first run it may ask
 |------|--------|
 | 1 | Verifies / installs **Xcode Command Line Tools** |
 | 2 | Installs **Homebrew** packages (`cmake`, `git`, `python3`, etc.) |
-| 3 | Installs **Qt 6.5.3** via `aqtinstall` (no Qt account needed) |
-| 4 | Clones **fritzing-app** from GitHub |
+| 3 | Installs **Qt 6.5.3** via `aqtinstall` in a venv (no Qt account needed) |
+| 4 | Clones **fritzing-app** pinned to the `develop` branch |
 | 5 | Downloads **Boost 1.84** headers |
 | 6 | Clones and builds **libgit2 1.7.1** (static) |
 | 7 | Clones **svgpp 1.3.1** (header-only) |
-| 8 | Downloads and builds **Clipper1 6.4.2** |
+| 8 | Downloads **Clipper1 6.4.2** headers from SourceForge |
 | 9 | Clones and builds **QuaZip 1.4** against Qt 6.5.3 |
-| 10 | Builds **ngspice 41** (shared dylib, for simulation) |
+| 10 | *(optional)* Builds **ngspice 41** — pass `--with-ngspice` to enable |
 | 11 | Runs `qmake` + `make` to build **Fritzing** |
-| 12 | Runs `macdeployqt` to bundle Qt frameworks |
+| 12 | Runs `macdeployqt` to bundle Qt frameworks into a self-contained `.app` |
 
 ---
 
