@@ -6,6 +6,7 @@
 #
 #   Qt 6.5.3 ....... official Qt servers (aqtinstall)
 #   fritzing-app ... github.com/fritzing  (tag 1.0.7)
+#   fritzing-parts . github.com/fritzing  (develop branch; part defs/SVGs/bins)
 #   Boost 1.84 ..... archives.boost.io    (official, headers only)
 #   libgit2 1.7.1 .. github.com/libgit2   (built static)
 #   svgpp 1.3.1 .... github.com/svgpp     (headers only)
@@ -29,6 +30,13 @@ NGSPICE_BUILD_TAG="ngspice-46"      # version we actually build: 42's bundled
                                     # and fails on Xcode 16.3 libc++. 46 compiles
                                     # clean (same version Homebrew ships) and its
                                     # sharedspice API is compatible with Fritzing.
+FRITZING_PARTS_REF="develop"        # fritzing-app's part definitions, SVGs, and
+                                    # bins/core.fzb live in a separate repo and
+                                    # aren't tracked as a submodule at this tag
+                                    # (no .gitmodules at 1.0.7); fritzing-parts
+                                    # itself hasn't been tag-released since 0.9.3b,
+                                    # so develop (its default branch) is the
+                                    # intended source for any current app version.
 
 JOBS=$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
@@ -131,7 +139,18 @@ if [[ -f "$GPG_CPP" ]] && grep -q 'PdmDevicePixelRatioF_EncodedA' "$GPG_CPP"; th
     log "patched Qt6-incompatible PdmDevicePixelRatioF_Encoded* case out of groundplanegenerator.cpp"
 fi
 
-# ── 4. Boost 1.84 headers (official) ─────────────────────────────────────────
+# ── 4. fritzing-parts (part definitions, SVGs, bins/core.fzb) ────────────────
+step "fritzing-parts (${FRITZING_PARTS_REF})"
+FRITZING_PARTS="$WORKSPACE/fritzing-parts"
+if [[ ! -d "$FRITZING_PARTS" ]]; then
+    git -c advice.detachedHead=false clone --depth 1 --branch "$FRITZING_PARTS_REF" \
+        https://github.com/fritzing/fritzing-parts.git "$FRITZING_PARTS"
+else
+    log "fritzing-parts already present; pulling latest $FRITZING_PARTS_REF"
+    git -C "$FRITZING_PARTS" pull --depth 1 origin "$FRITZING_PARTS_REF" 2>/dev/null || true
+fi
+
+# ── 5. Boost 1.84 headers (official) ─────────────────────────────────────────
 step "Boost ${BOOST_VERSION} (headers)"
 BOOST_DIR="$WORKSPACE/boost_${BOOST_VERSION}"
 if [[ ! -d "$BOOST_DIR/boost" ]]; then
@@ -143,7 +162,7 @@ else
     log "Boost already present"
 fi
 
-# ── 5. libgit2 1.7.1 (static) ────────────────────────────────────────────────
+# ── 6. libgit2 1.7.1 (static) ────────────────────────────────────────────────
 step "libgit2 ${LIBGIT2_VERSION} (static)"
 LIBGIT2_DIR="$WORKSPACE/libgit2-${LIBGIT2_VERSION}"
 if [[ ! -f "$LIBGIT2_DIR/lib/libgit2.a" ]]; then
@@ -164,13 +183,13 @@ else
     log "libgit2 already built"
 fi
 
-# ── 6. svgpp 1.3.1 (headers) ─────────────────────────────────────────────────
+# ── 7. svgpp 1.3.1 (headers) ─────────────────────────────────────────────────
 step "svgpp ${SVGPP_VERSION} (headers)"
 SVGPP_DIR="$WORKSPACE/svgpp-${SVGPP_VERSION}"
 [[ -d "$SVGPP_DIR/include" ]] || git -c advice.detachedHead=false clone --depth 1 \
     --branch "v${SVGPP_VERSION}" https://github.com/svgpp/svgpp.git "$SVGPP_DIR"
 
-# ── 7. QuaZip 1.4 (built against this Qt) ────────────────────────────────────
+# ── 8. QuaZip 1.4 (built against this Qt) ────────────────────────────────────
 step "QuaZip ${QUAZIP_VERSION}"
 QUAZIP_DIR="$WORKSPACE/quazip-${QT_VERSION}-${QUAZIP_VERSION}"   # dir must match $$QT_VERSION
 if [[ ! -d "$QUAZIP_DIR/lib" ]]; then
@@ -187,7 +206,7 @@ else
     log "QuaZip already built"
 fi
 
-# ── 8. Clipper1 6.4.2 (vendored → built to Clipper1-6.4.2/) ───────────────────
+# ── 9. Clipper1 6.4.2 (vendored → built to Clipper1-6.4.2/) ───────────────────
 step "Clipper1 ${CLIPPER1_VERSION} (from vendored source)"
 CLIPPER1_DIR="$WORKSPACE/Clipper1-${CLIPPER1_VERSION}"   # note the dash: 1.0.7 path
 if [[ ! -f "$CLIPPER1_DIR/lib/libpolyclipping.dylib" && ! -f "$CLIPPER1_DIR/lib/libpolyclipping.a" ]]; then
@@ -208,7 +227,7 @@ else
     log "Clipper1 already built"
 fi
 
-# ── 9. ngspice 42 (official mirror → shared lib + headers) ───────────────────
+# ── 10. ngspice 42 (official mirror → shared lib + headers) ───────────────────
 step "ngspice ${NGSPICE_VERSION} (shared library)"
 NGSPICE_DIR="$WORKSPACE/ngspice-${NGSPICE_VERSION}"
 if [[ ! -f "$NGSPICE_DIR/lib/libngspice.dylib" ]]; then
@@ -240,7 +259,7 @@ else
     log "ngspice already built"
 fi
 
-# ── 10. Build Fritzing ───────────────────────────────────────────────────────
+# ── 11. Build Fritzing ───────────────────────────────────────────────────────
 step "Building Fritzing ${FRITZING_REF}"
 BUILD_DIR="$WORKSPACE/fritzing-build"
 mkdir -p "$BUILD_DIR"
@@ -252,11 +271,46 @@ mkdir -p "$BUILD_DIR"
 APP="$(find "$BUILD_DIR" "$WORKSPACE" -maxdepth 3 -name 'Fritzing.app' 2>/dev/null | head -1)"
 [[ -n "$APP" ]] || die "build finished but Fritzing.app not found under $BUILD_DIR or $WORKSPACE"
 
-# ── 11. Bundle Qt frameworks + ngspice ───────────────────────────────────────
+# ── 12. Bundle Qt frameworks + ngspice + parts library ───────────────────────
 step "Deploying app bundle"
 "$QT_ROOT/bin/macdeployqt" "$APP" -verbose=1
 NGLIB="$(find "$NGSPICE_DIR/lib" -name 'libngspice*.dylib' | head -1)"
 [[ -n "$NGLIB" ]] && { cp "$NGLIB" "$APP/Contents/MacOS/"; log "bundled $(basename "$NGLIB")"; }
+
+# FolderUtils::getAppPartsSubFolder2() walks up from the executable's directory
+# looking for a "parts" (or "fritzing-parts") folder; Contents/parts is the
+# shallowest match. Without it the app can't find bins/core.fzb and shows
+# "Unable to find parts git repository" at startup. rsync so re-deploys stay
+# in sync with fritzing-parts without re-copying everything from scratch.
+rsync -a --delete --exclude='.git' "$FRITZING_PARTS/" "$APP/Contents/parts/"
+log "bundled fritzing-parts into Contents/parts"
+
+# macdeployqt bundles Qt frameworks the main Fritzing binary links directly,
+# and copies third-party dylibs (QuaZip, Clipper1) it finds via rpath, but it
+# doesn't recurse into *those* dylibs' own Qt dependencies — e.g. QuaZip links
+# QtCore5Compat, which then goes missing from Contents/Frameworks and crashes
+# the app at launch ("Library not loaded: @rpath/QtCore5Compat..."). Sweep the
+# whole bundle for any @rpath/Qt*.framework reference still missing and copy
+# it in, repeating until nothing's left, then re-sign (bundle contents changed
+# after macdeployqt's own signing pass).
+FRAMEWORKS_DIR="$APP/Contents/Frameworks"
+while :; do
+    MISSING=""
+    while IFS= read -r bin; do
+        for dep in $(otool -L "$bin" 2>/dev/null | awk '/@rpath\/Qt[A-Za-z0-9]*\.framework/ {print $1}'); do
+            fw="$(echo "$dep" | sed -E 's#@rpath/([^/]+\.framework).*#\1#')"
+            [[ -d "$FRAMEWORKS_DIR/$fw" ]] || MISSING+="$fw"$'\n'
+        done
+    done < <(find "$APP/Contents" -type f \( -perm -u+x -o -name '*.dylib' \) 2>/dev/null)
+    MISSING="$(echo "$MISSING" | sort -u | grep -v '^$' || true)"
+    [[ -z "$MISSING" ]] && break
+    while IFS= read -r fw; do
+        [[ -d "$QT_ROOT/lib/$fw" ]] || continue
+        cp -R "$QT_ROOT/lib/$fw" "$FRAMEWORKS_DIR/"
+        log "bundled transitively-missing framework: $fw"
+    done <<< "$MISSING"
+done
+codesign --force --deep --sign - "$APP"
 
 echo
 echo "╔══════════════════════════════════════════════════════════╗"

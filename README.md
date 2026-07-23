@@ -31,6 +31,7 @@ open "$(find build-workspace -name Fritzing.app | head -1)"
 |------------|---------|--------|
 | Qt | 6.5.3 | official Qt servers via `aqtinstall` (isolated venv) |
 | fritzing-app | tag **1.0.7** | github.com/fritzing/fritzing-app |
+| fritzing-parts | `develop` branch | github.com/fritzing/fritzing-parts — part defs, SVGs, `bins/core.fzb`; not a submodule at this tag and not tag-released since 0.9.3b |
 | Boost (headers) | 1.84 | archives.boost.io (official) |
 | libgit2 (static) | 1.7.1 | github.com/libgit2 |
 | svgpp (headers) | 1.3.1 | github.com/svgpp |
@@ -58,8 +59,9 @@ Fritzing-macos/                ← this repo (script + vendored Clipper)
 ├── deps/
 └── build-workspace/            ← gitignored; everything below is a sibling of fritzing-app
     ├── fritzing-app/            ← cloned at tag 1.0.7
+    ├── fritzing-parts/          ← cloned at develop; bundled into Contents/parts
     ├── fritzing-build/          ← qmake/make output
-    ├── release64/Fritzing.app/  ← the built app
+    ├── release64/Fritzing.app/  ← the built app (Contents/parts ← fritzing-parts)
     ├── Qt/6.5.3/macos/
     ├── boost_1_84_0/
     ├── libgit2-1.7.1/
@@ -83,6 +85,13 @@ Fritzing-macos/                ← this repo (script + vendored Clipper)
 - **Apple Silicon** — Qt is installed as `clang_64` and the app runs natively
   or via Rosetta. To force an Intel build if you hit an arch mismatch, add
   `CONFIG+=x86_64` to the `qmake` line in the script.
+- **"Unable to find parts git repository" / "Cannot read file /bins/core.fzb"**
+  — the app couldn't find `Contents/parts`. Re-run the script so step 4
+  (fritzing-parts) and the deploy step complete.
+- **Crashes at launch with "Library not loaded: @rpath/QtCore5Compat..."** —
+  `macdeployqt` doesn't recurse into the Qt dependencies of third-party dylibs
+  it bundles (QuaZip needs `QtCore5Compat`). The deploy step sweeps for and
+  fixes this automatically; if you hit it on an old build, re-run the script.
 
 ## License note
 
