@@ -34,7 +34,13 @@ JOBS=$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKSPACE="$(cd "$SCRIPT_DIR/.." && pwd)"     # deps are installed as siblings of fritzing-app
+# fritzing-app's pri/*detect.pri scripts expect every dependency to sit as a
+# sibling of fritzing-app/ itself — that's a hardcoded relative-path
+# requirement, not a preference. Nesting the whole workspace under this repo
+# (rather than in its parent directory) satisfies that while keeping
+# everything this script downloads/builds contained inside Fritzing-macos/.
+mkdir -p "$SCRIPT_DIR/build-workspace"
+WORKSPACE="$(cd "$SCRIPT_DIR/build-workspace" && pwd)"
 FRITZING_APP="$WORKSPACE/fritzing-app"
 QT_ROOT="$WORKSPACE/Qt/${QT_VERSION}/macos"
 VENDORED_CLIPPER="$SCRIPT_DIR/deps/polyclipping-${CLIPPER1_VERSION}/cpp"
@@ -81,6 +87,18 @@ QMAKE="$QT_ROOT/bin/qmake"
 [[ -x "$QMAKE" ]] || die "qmake not found at $QMAKE"
 log "qmake: $("$QMAKE" --version | tail -1)"
 
+# Every Qt 6.5.3 framework's baked-in .prl file (plus mkspecs/common/mac.conf)
+# links "-framework AGL", a legacy OpenGL framework Apple removed entirely
+# from modern macOS SDKs, so the final link step fails with
+# "framework 'AGL' not found". Strip it everywhere it appears (idempotent).
+AGL_HITS=$(grep -rl -- '-framework AGL' "$QT_ROOT" 2>/dev/null || true)
+if [[ -n "$AGL_HITS" ]]; then
+    while IFS= read -r f; do
+        sed -i.bak -e 's/-framework AGL//g' "$f" && rm -f "$f.bak"
+    done <<< "$AGL_HITS"
+    log "patched -framework AGL out of Qt's .prl/mkspec files"
+fi
+
 # ── 3. fritzing-app @ 1.0.7 ──────────────────────────────────────────────────
 step "fritzing-app (tag ${FRITZING_REF})"
 if [[ ! -d "$FRITZING_APP" ]]; then
@@ -100,6 +118,17 @@ QZ_PRI="$FRITZING_APP/pri/quazipdetect.pri"
 if [[ -f "$QZ_PRI" ]] && grep -q 'intuisphere' "$QZ_PRI"; then
     sed -i.bak 's/intuisphere//g' "$QZ_PRI" && rm -f "$QZ_PRI.bak"
     log "patched stray 'intuisphere' out of quazipdetect.pri"
+fi
+
+# Fix a Qt5-only code path in groundplanegenerator.cpp: it switches on
+# QPaintDevice::PdmDevicePixelRatioF_EncodedA/B and calls encodeMetricF(),
+# both of which existed only as a Qt5.14+ forward-compat shim and were
+# removed from Qt6's QPaintDevice enum entirely, so it fails to compile
+# against Qt 6.5.3 (idempotent).
+GPG_CPP="$FRITZING_APP/src/svg/groundplanegenerator.cpp"
+if [[ -f "$GPG_CPP" ]] && grep -q 'PdmDevicePixelRatioF_EncodedA' "$GPG_CPP"; then
+    perl -0pi -e 's/\n\s*case PdmDevicePixelRatioF_EncodedA:\n\s*case PdmDevicePixelRatioF_EncodedB:\n\s*return QPaintDevice::encodeMetricF\(metric, 1\.0\);\n/\n/' "$GPG_CPP"
+    log "patched Qt6-incompatible PdmDevicePixelRatioF_Encoded* case out of groundplanegenerator.cpp"
 fi
 
 # ── 4. Boost 1.84 headers (official) ─────────────────────────────────────────
@@ -122,6 +151,7 @@ if [[ ! -f "$LIBGIT2_DIR/lib/libgit2.a" ]]; then
         --branch "v${LIBGIT2_VERSION}" https://github.com/libgit2/libgit2.git "$LIBGIT2_DIR"
     cmake -S "$LIBGIT2_DIR" -B "$LIBGIT2_DIR/build" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$LIBGIT2_DIR" \
+        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
         -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_CLI=OFF -DUSE_SSH=OFF
     cmake --build "$LIBGIT2_DIR/build" --parallel "$JOBS"
     cmake --install "$LIBGIT2_DIR/build"
@@ -149,6 +179,7 @@ if [[ ! -d "$QUAZIP_DIR/lib" ]]; then
         --branch "v${QUAZIP_VERSION}" https://github.com/stachenov/quazip.git "$QUAZIP_SRC"
     cmake -S "$QUAZIP_SRC" -B "$QUAZIP_SRC/build" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT" \
+        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
         -DCMAKE_INSTALL_PREFIX="$QUAZIP_DIR" -DQUAZIP_QT_MAJOR_VERSION=6
     cmake --build "$QUAZIP_SRC/build" --parallel "$JOBS"
     cmake --install "$QUAZIP_SRC/build"
@@ -168,6 +199,7 @@ if [[ ! -f "$CLIPPER1_DIR/lib/libpolyclipping.dylib" && ! -f "$CLIPPER1_DIR/lib/
     # upstream file (keeps its recorded SHA-256 intact).
     cmake -S "$VENDORED_CLIPPER" -B "$BUILD" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$CLIPPER1_DIR"
     cmake --build "$BUILD" --parallel "$JOBS"
     cmake --install "$BUILD"
@@ -217,8 +249,8 @@ mkdir -p "$BUILD_DIR"
   "$QMAKE" -spec macx-clang "boost_root=$BOOST_DIR" "$FRITZING_APP/phoenix.pro"
   make -j"$JOBS" )
 
-APP="$(find "$BUILD_DIR" -maxdepth 3 -name 'Fritzing.app' | head -1)"
-[[ -n "$APP" ]] || die "build finished but Fritzing.app not found under $BUILD_DIR"
+APP="$(find "$BUILD_DIR" "$WORKSPACE" -maxdepth 3 -name 'Fritzing.app' 2>/dev/null | head -1)"
+[[ -n "$APP" ]] || die "build finished but Fritzing.app not found under $BUILD_DIR or $WORKSPACE"
 
 # ── 11. Bundle Qt frameworks + ngspice ───────────────────────────────────────
 step "Deploying app bundle"

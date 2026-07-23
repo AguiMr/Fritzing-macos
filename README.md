@@ -22,7 +22,7 @@ skips anything already built.
 When it finishes:
 
 ```bash
-open "$(find .. -name Fritzing.app | head -1)"
+open "$(find build-workspace -name Fritzing.app | head -1)"
 ```
 
 ## Dependencies and where each comes from
@@ -48,21 +48,25 @@ See [`deps/polyclipping-6.4.2/PROVENANCE.md`](deps/polyclipping-6.4.2/PROVENANCE
 
 ## Directory layout
 
-The script installs dependencies as **siblings of `fritzing-app/`**, which is
-what Fritzing's `pri/*detect.pri` scripts expect:
+Fritzing's `pri/*detect.pri` scripts hardcode every dependency as a
+**sibling of `fritzing-app/`**, so the script nests a self-contained
+workspace under this repo rather than spilling into its parent directory:
 
 ```
-<parent>/
-├── Fritzing-macos/            ← this repo (script + vendored Clipper)
-├── fritzing-app/              ← cloned at tag 1.0.7
-├── fritzing-build/            ← qmake/make output → Fritzing.app
-├── Qt/6.5.3/macos/
-├── boost_1_84_0/
-├── libgit2-1.7.1/
-├── svgpp-1.3.1/
-├── quazip-6.5.3-1.4/
-├── Clipper1-6.4.2/            ← built from deps/polyclipping-6.4.2
-└── ngspice-42/
+Fritzing-macos/                ← this repo (script + vendored Clipper)
+├── build_fritzing_macos.sh
+├── deps/
+└── build-workspace/            ← gitignored; everything below is a sibling of fritzing-app
+    ├── fritzing-app/            ← cloned at tag 1.0.7
+    ├── fritzing-build/          ← qmake/make output
+    ├── release64/Fritzing.app/  ← the built app
+    ├── Qt/6.5.3/macos/
+    ├── boost_1_84_0/
+    ├── libgit2-1.7.1/
+    ├── svgpp-1.3.1/
+    ├── quazip-6.5.3-1.4/
+    ├── Clipper1-6.4.2/          ← built from deps/polyclipping-6.4.2
+    └── ngspice-42/
 ```
 
 ## Troubleshooting
