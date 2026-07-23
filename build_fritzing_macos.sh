@@ -54,7 +54,7 @@ fi
 command -v brew &>/dev/null || die "Homebrew is required. Install from https://brew.sh then re-run."
 
 log "Installing build tools via Homebrew…"
-for pkg in cmake git python3 autoconf automake libtool pkg-config openssl@3 bison; do
+for pkg in cmake git python3 autoconf automake libtool pkg-config openssl@3 bison flex; do
     brew list "$pkg" &>/dev/null || brew install "$pkg"
 done
 
@@ -168,7 +168,12 @@ if [[ ! -f "$NGSPICE_DIR/lib/libngspice.dylib" ]]; then
     NGSPICE_SRC="$WORKSPACE/ngspice-src"
     [[ -d "$NGSPICE_SRC" ]] || git -c advice.detachedHead=false clone --depth 1 \
         --branch "ngspice-${NGSPICE_VERSION}" https://github.com/imr/ngspice.git "$NGSPICE_SRC"
-    ( cd "$NGSPICE_SRC"
+    # macOS system bison/flex are ancient and cannot parse ngspice's grammar;
+    # Homebrew's are keg-only, so put them first on PATH for autogen and make.
+    BISON_PREFIX="$(brew --prefix bison 2>/dev/null || true)"
+    FLEX_PREFIX="$(brew --prefix flex 2>/dev/null || true)"
+    ( export PATH="${BISON_PREFIX:+$BISON_PREFIX/bin:}${FLEX_PREFIX:+$FLEX_PREFIX/bin:}$PATH"
+      cd "$NGSPICE_SRC"
       [[ -x ./configure ]] || ./autogen.sh
       rm -rf release && mkdir -p release && cd release   # clean reconfigure
       # Apple clang (Xcode 16.3+) defaults to C23, where 'bool' is a keyword;
