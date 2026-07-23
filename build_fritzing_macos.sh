@@ -93,6 +93,15 @@ else
 fi
 log "HEAD: $(git -C "$FRITZING_APP" describe --tags --always 2>/dev/null || echo '?')"
 
+# Fix an upstream typo in the 1.0.7 tag: pri/quazipdetect.pri appends a stray
+# literal "intuisphere" to the QuaZip path, so qmake looks for a nonexistent
+# directory. Strip it from the checked-out source (idempotent).
+QZ_PRI="$FRITZING_APP/pri/quazipdetect.pri"
+if [[ -f "$QZ_PRI" ]] && grep -q 'intuisphere' "$QZ_PRI"; then
+    sed -i.bak 's/intuisphere//g' "$QZ_PRI" && rm -f "$QZ_PRI.bak"
+    log "patched stray 'intuisphere' out of quazipdetect.pri"
+fi
+
 # ── 4. Boost 1.84 headers (official) ─────────────────────────────────────────
 step "Boost ${BOOST_VERSION} (headers)"
 BOOST_DIR="$WORKSPACE/boost_${BOOST_VERSION}"
