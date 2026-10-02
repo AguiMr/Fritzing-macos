@@ -1,27 +1,34 @@
 name: Build & Release Fritzing (macOS)
 
-# Builds Fritzing 1.0.7 from source on both Apple Silicon and Intel, packages
-# each as a .dmg, and publishes them to a GitHub Release when a version tag is
-# pushed. Manual runs (workflow_dispatch) build and upload artifacts only.
+# Builds Fritzing 1.0.7 from source for Apple Silicon and Intel, packages each
+# as a .dmg, and (on a version tag) attaches it to a GitHub Release.
+#
+# Each architecture builds and publishes INDEPENDENTLY: the fast, reliable
+# arm64 build always ships, and the Intel build is best-effort — GitHub's
+# macos-13 (Intel) runners are scarce and may queue a long time or be retired,
+# and that must never block or delay the arm64 release.
+#
+# Triggers: only a maintainer pushing a tag like v1.0.7-1, or a manual run from
+# the Actions tab. Nothing runs automatically.
 on:
   push:
     tags:
-      - 'v*'            # e.g. git tag v1.0.7-1 && git push origin v1.0.7-1
-  workflow_dispatch:     # run on demand from the Actions tab
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write        # needed to create the Release and upload assets
+  contents: write        # create the Release and upload assets
 
 jobs:
   build:
     name: Build (${{ matrix.arch }})
     strategy:
-      fail-fast: false
+      fail-fast: false     # one arch failing/queuing never cancels the other
       matrix:
         include:
           - runner: macos-14   # Apple Silicon
             arch: arm64
-          - runner: macos-13   # Intel
+          - runner: macos-13   # Intel (best-effort; may be slow/unavailable)
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
@@ -57,41 +64,35 @@ jobs:
             Fritzing-*.dmg.sha256
           if-no-files-found: error
 
-  release:
-    name: Publish Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Create GitHub Release
+      # On a tag build, attach THIS arch's DMG to the Release for the tag.
+      # softprops/action-gh-release upserts: whichever job runs first creates
+      # the release, the other just adds its file. A slow/absent Intel build
+      # simply means the release ships with the arm64 DMG and gains the Intel
+      # one later if/when that job completes.
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Fritzing-*.dmg
-            dist/Fritzing-*.dmg.sha256
+            Fritzing-*.dmg
+            Fritzing-*.dmg.sha256
           fail_on_unmatched_files: true
           body: |
             Unofficial community build of **Fritzing 1.0.7** for macOS, built
-            from source by this repo's CI. Two builds are attached:
+            from source by this repository's CI.
 
+            Downloads are attached below:
             - `Fritzing-1.0.7-arm64.dmg`  — Apple Silicon (M-series)
-            - `Fritzing-1.0.7-x86_64.dmg` — Intel
+            - `Fritzing-1.0.7-x86_64.dmg` — Intel *(added when the Intel runner
+              is available; may lag the arm64 build or be absent)*
 
             Fritzing is GPLv3; this release redistributes a build of upstream
-            Fritzing 1.0.7. Source build tooling is in this repository.
+            Fritzing 1.0.7. The build tooling is in this repository.
 
             ### First launch (important)
             These builds are **ad-hoc signed, not notarized** (no paid Apple
-            Developer account), so Gatekeeper will block them on first open.
-            After copying Fritzing to /Applications, either:
+            Developer account), so Gatekeeper blocks them on first open. After
+            copying Fritzing to /Applications, either:
 
             - right-click the app → **Open** → **Open** in the dialog, or
             - run once in Terminal:
@@ -99,4 +100,4 @@ jobs:
               xattr -dr com.apple.quarantine /Applications/Fritzing.app
               ```
 
-            Verify your download against the attached `.sha256` files.
+            Verify your download against the attached `.sha256` file.
